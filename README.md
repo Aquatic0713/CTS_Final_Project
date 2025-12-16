@@ -82,7 +82,7 @@ pip install -r requirements.txt
 ```
 ### 2\. 準備資料
 
-資料下載：https://drive.google.com/drive/folders/1Qp2Mhn3A8tZQ2_6Y1_EvPuPohHYiq0oD?usp=sharing
+資料下載：https://drive.google.com/drive/folders/1IYyMttKgM-yVCLweL9d5zqUlhRyDSsma?usp=sharing
 
 請將資料集放置於 `CTS_dataset/` 資料夾中，結構如下：
 
@@ -149,7 +149,7 @@ $$IoU = \frac{|P \cap G|}{|P \cup G|} = \frac{|P \cap G|}{|P| + |G| - |P \cap G|
 ---
 ## 影片展示
  
-https://drive.google.com/file/d/1oTHzArQfBCDwykUiPO51zXy02SysnuZS/view?usp=sharing
+https://drive.google.com/file/d/1rJGlH3nuB1Rxqtggut-kLJj-TKmlDBKP/view?usp=sharing
 
 -----
 
