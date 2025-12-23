@@ -65,27 +65,7 @@ U-Net 是醫學影像分割領域最經典的模型，因其架構圖形狀像�
 * **降低語義落差**：透過中間層的卷積單元，讓左邊的特徵在傳過去右邊之前，先經過多次的消化與融合。
 * **效果**：這讓模型在處理 **形狀不規則** 或 **邊界模糊** 的物體（如 MRI 中的細小神經）時，能切得更精準。
 
-### 2. 評估指標：Dice 係數 (Dice Coefficient)
-
-在醫學影像分割中，我們不用「準確率 (Accuracy)」來評分，因為背景通常是一大片黑色，猜對背景沒意義。我們使用的是 **Dice Coefficient (Dice Score)**，專門用來計算「兩個集合的重疊程度」。
-
-#### **運算公式**
-假設 **$X$** 是模型預測的區域 (Prediction)，**$Y$** 是醫生標註的標準答案 (Ground Truth)，公式如下：
-
-$$
-\text{Dice} = \frac{2 \times |X \cap Y|}{|X| + |Y|}
-$$
-
-* **分子 ($2 \times |X \cap Y|$)**：兩者「重疊區域」面積的兩倍。
-* **分母 ($|X| + |Y|$)**：兩者總面積的相加。
-
-#### **數值意義**
-* **範圍**：0 到 1。
-* **0.0**：完全沒有重疊（完全猜錯）。
-* **1.0**：完全重疊（完美預測，跟醫生畫的一模一樣）。
-* 通常在醫學分割任務中，Dice 超過 **0.85** 就算是非常優秀的結果。
-
-### 3. 其他關鍵技術
+### 2. 其他關鍵技術
 
 * **骨幹網路 (Backbone - EfficientNet-B3)**：
     我們沒有從零訓練 U-Net 的編碼器，而是使用了預訓練的 EfficientNet-B3。它擁有強大的特徵提取能力，能用較少的參數達到更高的效能，加速訓練收斂。
@@ -95,6 +75,7 @@ $$
 ---
 
 ## 🚀 訓練策略指南 (Training Strategy)
+
 本專案採用 **SOTA (State-of-the-Art) 轉移學習策略**，利用 EfficientNet 預訓練骨幹加速收斂，並設定了自動化的訓練停止機制以防止過擬合。
 
 ### 1. 關鍵參數配置 (Hyperparameters)
@@ -102,9 +83,19 @@ $$
 * **Batch Size**：設定為 **1**，針對高解析度醫學影像優化顯存使用。
 * **Learning Rate**：初始設為 **1e-4**，配合預訓練權重進行微調。
 
-### 2. 優化策略 (Optimization)
-* **類別權重 (Class Weights)**：針對 MN (正中神經) 極小目標設定高權重 `[0.5, 10.0, 2.0, 2.0]`，強迫模型專注於學習細微特徵。
-* **動態排程 (Scheduler)**：使用 `ReduceLROnPlateau` 監控驗證集分數。當指標停滯超過 **10** 個 Epoch 時，自動將學習率減半 (Factor=0.5)，進行更精細的權重搜索。
+### 2. ⚖️ 損失函數權重策略 (Loss Function Weighing Strategy)
+針對醫學影像中常見的**類別不平衡 (Class Imbalance)** 問題，我們採用了非對稱的權重設定 `[0.5, 10.0, 2.0, 2.0]`，具體邏輯如下：
+
+| 類別索引 | 目標結構 | 權重設定 | 策略意義 |
+| :---: | :--- | :---: | :--- |
+| **0** | **背景 (Background)** | **0.5** | **降權 (Down-weighting)**<br>背景容易預測，降低其對 Loss 的貢獻，避免模型刷分。 |
+| **1** | **正中神經 (MN)** | **10.0** | **極重權 (High-Penalty)**<br>MN 目標極小且模糊。我們賦予它 **20倍於背景** 的權重，強迫模型專注學習細微特徵。 |
+| **2** | **屈肌腱 (FT)** | **2.0** | **適度加權**<br>結構較大，給予適當關注。 |
+| **3** | **腕隧道 (CT)** | **2.0** | **適度加權**<br>定義整體區域範圍，權重與 FT 保持一致。 |
+
+### 3. 動態排程 (Dynamic Scheduler)
+* **監控機制**：使用 `ReduceLROnPlateau` 監控驗證集分數 (Validation Score)。
+* **自動調整**：當指標停滯超過 **10** 個 Epoch 時，系統會自動將學習率減半 (Factor=0.5)。這就像在找停車位時，越接近目標車速要越慢，以便進行更精細的權重搜索。
 
 ---
 
@@ -163,24 +154,44 @@ python app.py
 ---
 ## 📊 評估指標 (Evaluation Metrics)
 
-本專案採用醫學影像分割領域最常用的兩大指標來評估模型效能：**Dice Coefficient** 與 **Intersection over Union (IoU)**。
+本專案採用醫學影像分割領域最權威的兩大指標：**Dice Coefficient** 與 **IoU**。
 
 ### 1. Dice Coefficient (Dice Score)
-Dice 係數衡量預測區域與真實標註區域的相似度（值域 0~1，越高越好），對於醫學影像中常見的小目標（如神經）特別敏感。
-
-$$Dice = \frac{2 |P \cap G|}{|P| + |G|}$$
+**醫學影像分割的黃金標準 (Gold Standard)**
+* **特點**：對 **小目標 (如正中神經)** 特別敏感。
+* **公式**：
+  $$Dice = \frac{2 \times |P \cap G|}{|P| + |G|}$$
+* **白話文**：`(2 × 重疊面積) ÷ (預測總面積 + 真實總面積)`
 
 ### 2. Intersection over Union (IoU)
-IoU 又稱為 Jaccard Index，計算的是「交集」除以「聯集」的比例。它是評估物件偵測與分割最直觀的幾何指標。
+**又稱為 Jaccard Index，最直觀的幾何指標**
+* **特點**：比 Dice 更嚴格，用於驗證模型強健性。
+* **公式**：
+  $$IoU = \frac{|P \cap G|}{|P \cup G|}$$
+* **白話文**：`(重疊面積) ÷ (預測與真實涵蓋的總聯集面積)`
 
-$$IoU = \frac{|P \cap G|}{|P \cup G|} = \frac{|P \cap G|}{|P| + |G| - |P \cap G|}$$
 
-> 其中 $P$ 為 Prediction (預測結果)，$G$ 為 Ground Truth (真實標註)。
+#### 📝 符號定義
+* $P$ (Prediction)：模型預測區域
+* $G$ (Ground Truth)：醫生標註區域
+* $\cap$ (Intersection)：交集 (重疊部分)
 
-程式會在驗證階段輸出：
-* ✅ **Mean MN**: 正中神經平均分數 (Dice/IoU)
-* ✅ **Mean FT**: 屈肌腱平均分數 (Dice/IoU)
-* ✅ **Mean CT**: 腕隧道平均分數 (Dice/IoU)
+---
+
+### 🖥️ 訓練過程輸出範例 (Training Log Output)
+
+當您執行訓練腳本 (`train_sota.py`) 時，終端機將即時顯示每個 **Fold** 與 **Epoch** 的訓練進度。系統會自動監控驗證集分數 (Val Score)，並標記出最佳模型：
+
+```text
+🚀 開始 SOTA 訓練 (U-Net++ with EfficientNet-B3)
+
+⚡ Fold 1/5 | Train:['6', '7', ...] | Val:['8'] | Test:['9']
+[Ep 1] Loss: 0.6671 | Val Score: 0.4391 🌟 New Best!
+[Ep 2] Loss: 0.2105 | Val Score: 0.6600 🌟 New Best!
+[Ep 3] Loss: 0.1192 | Val Score: 0.7410 🌟 New Best!
+...
+```
+
 ---
 ## 💻 GUI 介面顯示
 
