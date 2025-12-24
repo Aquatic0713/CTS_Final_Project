@@ -11,7 +11,7 @@ from dataset_cts_v5 import CTSDatasetV5, DATA_ROOT
 
 # ===== 1. 參數設定 =====
 BATCH_SIZE = 1  # 醫學影像較大，顯卡記憶體有限時設為 1
-EPOCHS = 100    # 訓練總回數
+EPOCHS = 300    # 訓練總回數
 LEARNING_RATE = 1e-4  # ★ 使用預訓練模型時，學習率要調小 (1e-4)，避免破壞學好的特徵
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
